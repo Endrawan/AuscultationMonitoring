@@ -9,25 +9,50 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import androidx.appcompat.app.AppCompatDelegate
+import com.endrawan.auscultationmonitoring.databinding.ActivityMainBinding
+import com.github.mikephil.charting.components.YAxis
+import com.github.mikephil.charting.data.Entry
+import com.github.mikephil.charting.data.LineData
+import com.github.mikephil.charting.data.LineDataSet
 import com.hoho.android.usbserial.driver.UsbSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.driver.UsbSerialProber
 import com.hoho.android.usbserial.util.SerialInputOutputManager
 import java.lang.Exception
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import kotlin.experimental.and
+import kotlin.experimental.or
 
 class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
 
-    private val BAUD_RATE = 9600
+    private lateinit var binding: ActivityMainBinding
+
+    private val BAUD_RATE = 115200
     private val DATA_BITS = 8
     private val TAG = "MainActivity"
     private val ACTION_USB_PERMISSION = "com.android.example.USB_PERMISSION"
     private lateinit var port: UsbSerialPort
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+    private val REFRESH_DATA_INTERVAL: Long = 200 // 0.2 Seconds
+    private val CHART_X_RANGE_VISIBILITY = 1000
+    private val CHART_Y_RANGE_VISIBILITY = 1024
+    private val MAX_ADC_RESOLUTION = 1023u
+    private val lineDataSet = LineDataSet(ArrayList<Entry>(), "Recorded Data")
+    private val lineData = LineData(lineDataSet)
 
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
+        super.onCreate(savedInstanceState)
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+
+        prepareGraph()
         usbConnection()
     }
 
@@ -93,11 +118,53 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
     }
 
     override fun onNewData(data: ByteArray?) {
-        val dataString = String(data!!)
-        Log.d(TAG, "Data received: $dataString")
+        for (i in data!!.indices step 2) {
+            val realValue = (data[i].toUByte() * 256u) + data[i+1].toUByte()
+            val limitValue = realValue and MAX_ADC_RESOLUTION
+            lineDataSet.addEntry(Entry(lineDataSet.entryCount.toFloat(), limitValue.toFloat()))
+        }
+    }
+
+    private fun onNewDataDiagnostic(data: ByteArray?) {
+        Log.d(TAG, "Data size: ${data!!.size}")
+        for (i in data.indices) {
+            Log.d(TAG, "data[$i]: ${data[i].toUByte()}")
+        }
+        val realValue = (data[0].toUByte() * 256u) + data[1].toUByte()
+        Log.d(TAG, "Data value: $realValue")
     }
 
     override fun onRunError(e: Exception?) {
         Log.d(TAG, "Exception found: ${e?.message}")
+    }
+
+    private fun prepareGraph() {
+        styleLineDataSet()
+        binding.chart.data = lineData
+        binding.chart.invalidate()
+        refreshGraphPeriodically()
+    }
+
+    private fun styleLineDataSet() {
+        lineDataSet.setDrawValues(false)
+        lineDataSet.setDrawCircles(false)
+    }
+
+    private fun refreshGraphPeriodically() {
+        val refreshDataHandler = Handler(Looper.getMainLooper())
+        val refreshDataCode = object: Runnable {
+            override fun run() {
+                lineData.notifyDataChanged()
+                binding.chart.notifyDataSetChanged()
+                binding.chart.setVisibleXRangeMaximum(CHART_X_RANGE_VISIBILITY.toFloat())
+                binding.chart.moveViewTo(
+                    lineDataSet.entryCount - CHART_X_RANGE_VISIBILITY - 1f,
+                    CHART_Y_RANGE_VISIBILITY.toFloat(),
+                    YAxis.AxisDependency.LEFT)
+
+                refreshDataHandler.postDelayed(this, REFRESH_DATA_INTERVAL)
+            }
+        }
+        refreshDataHandler.post(refreshDataCode)
     }
 }
