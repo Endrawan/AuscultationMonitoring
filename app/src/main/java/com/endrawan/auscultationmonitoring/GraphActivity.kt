@@ -18,7 +18,7 @@ class GraphActivity : AppCompatActivity() {
         1, 3, 5, 7, 9, 7, 5, 3, 1
     )
 
-    private val ADD_DATA_INTERVAL: Long = 10 // 1 Seconds
+    private val ADD_DATA_INTERVAL: Long = 10
     private val REFRESH_DATA_INTERVAL: Long = 100 // 0.1 Seconds
 
     private val CHART_X_RANGE_VISIBILITY = 200

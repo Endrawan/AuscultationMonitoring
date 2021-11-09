@@ -27,6 +27,12 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.experimental.and
 import kotlin.experimental.or
+import android.R.color.holo_orange_light
+
+import androidx.core.content.ContextCompat
+
+
+
 
 class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
 
@@ -39,9 +45,10 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
     private lateinit var port: UsbSerialPort
 
     private val REFRESH_DATA_INTERVAL: Long = 200 // 0.2 Seconds
-    private val CHART_X_RANGE_VISIBILITY = 1000
-    private val CHART_Y_RANGE_VISIBILITY = 1024
+    private val CHART_X_RANGE_VISIBILITY = 100
+    private val CHART_Y_RANGE_VISIBILITY = 1024f
     private val MAX_ADC_RESOLUTION = 1023u
+    private val ADD_DATA_INTERVAL : Long = 50 // ms
     private val lineDataSet = LineDataSet(ArrayList<Entry>(), "Recorded Data")
     private val lineData = LineData(lineDataSet)
 
@@ -53,7 +60,8 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
         setContentView(binding.root)
 
         prepareGraph()
-        usbConnection()
+        lineDataSet.addEntry(Entry(lineDataSet.entryCount.toFloat(), 0f))
+        addNewDataPeriodically()
     }
 
     private fun usbConnection() {
@@ -146,8 +154,21 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
     }
 
     private fun styleLineDataSet() {
+        val color = ContextCompat.getColor(this, holo_orange_light)
         lineDataSet.setDrawValues(false)
         lineDataSet.setDrawCircles(false)
+        lineDataSet.color = color
+    }
+
+    private fun addNewDataPeriodically() {
+        val addDataHandler = Handler(Looper.getMainLooper())
+        val addDataCode = object: Runnable {
+            override fun run() {
+                lineDataSet.addEntry(Entry(lineDataSet.entryCount.toFloat(), (0..1023).random().toFloat()))
+                addDataHandler.postDelayed(this, ADD_DATA_INTERVAL)
+            }
+        }
+        addDataHandler.post(addDataCode)
     }
 
     private fun refreshGraphPeriodically() {
@@ -159,7 +180,7 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
                 binding.chart.setVisibleXRangeMaximum(CHART_X_RANGE_VISIBILITY.toFloat())
                 binding.chart.moveViewTo(
                     lineDataSet.entryCount - CHART_X_RANGE_VISIBILITY - 1f,
-                    CHART_Y_RANGE_VISIBILITY.toFloat(),
+                    CHART_Y_RANGE_VISIBILITY,
                     YAxis.AxisDependency.LEFT)
 
                 refreshDataHandler.postDelayed(this, REFRESH_DATA_INTERVAL)
