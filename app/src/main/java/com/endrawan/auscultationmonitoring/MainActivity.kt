@@ -38,7 +38,11 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
 
     private lateinit var binding: ActivityMainBinding
 
-    private val BAUD_RATE = 115200
+    private var CR_active = false
+    private var NL_active = false
+    private var serialBuffer = ""
+
+    private val BAUD_RATE = 250000
     private val DATA_BITS = 8
     private val TAG = "MainActivity"
     private val ACTION_USB_PERMISSION = "com.android.example.USB_PERMISSION"
@@ -131,11 +135,30 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
     }
 
     override fun onNewData(data: ByteArray?) {
-        for (i in data!!.indices step 2) {
-            val realValue = (data[i].toUByte() * 256u) + data[i+1].toUByte()
-            val limitValue = realValue and MAX_ADC_RESOLUTION
-            val voltageVal: Float = limitValue.toFloat() * ADC_VOLTAGE_REF.toFloat() / MAX_ADC_RESOLUTION.toFloat()
-            lineDataSet.addEntry(Entry(lineDataSet.entryCount.toFloat(), voltageVal))
+        for (i in data!!.indices) {
+            when (val intVal = data[i].toInt()) {
+                in 48..57 -> {
+                    val c = intVal.toChar()
+                    serialBuffer += c
+                }
+                10 -> { // New Line
+                    NL_active = true
+                }
+                13 -> {
+                    CR_active = true
+                }
+            }
+
+            if(NL_active && CR_active) {
+                val serialValue = serialBuffer.toUIntOrNull()
+                serialBuffer = ""
+                CR_active = false
+                NL_active = false
+                if(serialValue == null) continue
+                val limitValue = serialValue and MAX_ADC_RESOLUTION
+                val voltageVal: Float = limitValue.toFloat() * ADC_VOLTAGE_REF.toFloat() / MAX_ADC_RESOLUTION.toFloat()
+                lineDataSet.addEntry(Entry(lineDataSet.entryCount.toFloat(), voltageVal))
+            }
         }
     }
 
