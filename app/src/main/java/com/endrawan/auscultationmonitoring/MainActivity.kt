@@ -30,8 +30,8 @@ import kotlin.experimental.or
 import android.R.color.holo_orange_light
 
 import androidx.core.content.ContextCompat
-
-
+import com.github.mikephil.charting.components.AxisBase
+import com.github.mikephil.charting.formatter.ValueFormatter
 
 
 class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
@@ -44,11 +44,15 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
     private val ACTION_USB_PERMISSION = "com.android.example.USB_PERMISSION"
     private lateinit var port: UsbSerialPort
 
+    private val DATA_FREQUENCY = 4000 //100
     private val REFRESH_DATA_INTERVAL: Long = 200 // 0.2 Seconds
-    private val CHART_X_RANGE_VISIBILITY = 100
-    private val CHART_Y_RANGE_VISIBILITY = 1024f
+    private val CHART_X_RANGE_VISIBILITY = 2 * DATA_FREQUENCY //8000
+    private val CHART_Y_RANGE_VISIBILITY = 5f //1024f
     private val MAX_ADC_RESOLUTION = 1023u
-    private val ADD_DATA_INTERVAL : Long = 50 // ms
+    private val ADC_VOLTAGE_REF = 5u
+
+    private val ADD_DATA_INTERVAL : Long = 10 // ms
+
     private val lineDataSet = LineDataSet(ArrayList<Entry>(), "Recorded Data")
     private val lineData = LineData(lineDataSet)
 
@@ -60,8 +64,9 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
         setContentView(binding.root)
 
         prepareGraph()
-        lineDataSet.addEntry(Entry(lineDataSet.entryCount.toFloat(), 0f))
-        addNewDataPeriodically()
+        usbConnection()
+//        lineDataSet.addEntry(Entry(lineDataSet.entryCount.toFloat(), 0f))
+//        addNewDataPeriodically()
     }
 
     private fun usbConnection() {
@@ -129,7 +134,8 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
         for (i in data!!.indices step 2) {
             val realValue = (data[i].toUByte() * 256u) + data[i+1].toUByte()
             val limitValue = realValue and MAX_ADC_RESOLUTION
-            lineDataSet.addEntry(Entry(lineDataSet.entryCount.toFloat(), limitValue.toFloat()))
+            val voltageVal: Float = limitValue.toFloat() * ADC_VOLTAGE_REF.toFloat() / MAX_ADC_RESOLUTION.toFloat()
+            lineDataSet.addEntry(Entry(lineDataSet.entryCount.toFloat(), voltageVal))
         }
     }
 
@@ -148,6 +154,15 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
 
     private fun prepareGraph() {
         styleLineDataSet()
+        binding.chart.xAxis.granularity = DATA_FREQUENCY.toFloat()
+        binding.chart.xAxis.valueFormatter = object: ValueFormatter() {
+            override fun getAxisLabel(value: Float, axis: AxisBase?): String {
+                val rawSeconds = (value / DATA_FREQUENCY).toInt()
+                val seconds = rawSeconds % 60
+                val minutes = rawSeconds / 60
+                return String.format("%d:%02d", minutes, seconds)
+            }
+        }
         binding.chart.data = lineData
         binding.chart.invalidate()
         refreshGraphPeriodically()
