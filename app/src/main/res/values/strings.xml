@@ -1,3 +1,4 @@
 <resources>
-    <string name="app_name">AuscultationMonitoring</string>
+    <string name="app_name">Auscultation Monitoring</string>
+    <string name="daftar">Arsip</string>
 </resources>

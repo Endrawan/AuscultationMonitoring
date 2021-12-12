@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="Filter" parent="Theme.AuscultationMonitoring">
+        <item name="android:layout_width">36dp</item>
+        <item name="android:layout_height">36dp</item>
+        <item name="android:padding">@dimen/padding_xsmall</item>
+    </style>
+
+    <style name="FilterNormal" parent="Filter">
+
+    </style>
+
+    <style name="FilterDisabled" parent="Filter">
+
+    </style>
+
+    <style name="FilterSelected" parent="Filter">
+
+    </style>
+</resources>
