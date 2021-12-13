@@ -34,7 +34,9 @@ import com.endrawan.auscultationmonitoring.extensions.filterSelected
 import com.github.mikephil.charting.components.AxisBase
 import com.github.mikephil.charting.formatter.ValueFormatter
 import android.content.DialogInterface
+import android.widget.Toast
 import com.endrawan.auscultationmonitoring.configs.Config
+import com.endrawan.auscultationmonitoring.configs.Config.WRITE_WAIT_MILLIS
 
 
 class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
@@ -45,11 +47,12 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
     private var NL_active = false
     private var serialBuffer = ""
 
-    private val BAUD_RATE = 1000000 //250000
+//    private val BAUD_RATE = 1000000 //250000
     private val DATA_BITS = 8
     private val TAG = "MainActivity"
     private val ACTION_USB_PERMISSION = "com.android.example.USB_PERMISSION"
     private lateinit var port: UsbSerialPort
+    private lateinit var usbIoManager: SerialInputOutputManager
 
     private val DATA_FREQUENCY = 4000 //100
     private val REFRESH_DATA_INTERVAL: Long = 200 // 0.2 Seconds
@@ -68,7 +71,7 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
     private val lineDataSet = LineDataSet(ArrayList<Entry>(), "Recorded Data")
     private val lineData = LineData(lineDataSet)
 
-    private var FILTER_OPTION = false // false == heart filter; true == lung filter
+    private var FILTER_OPTION = Config.OPTION_UNFILTERED
     private var AUSCULTATION_STATUS = Config.AUSCULTATION_IDLE
 
 
@@ -84,13 +87,13 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
         prepareGraph()
 
 //        usbConnection()
-//        lineDataSet.addEntry(Entry(lineDataSet.entryCount.toFloat(), 0f))
+        lineDataSet.addEntry(Entry(lineDataSet.entryCount.toFloat(), 0f))
 //        addNewDataPeriodically()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-//        port.close()
+        port.close()
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
@@ -115,33 +118,39 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
     private fun prepareFilterOption() {
         binding.checkboxFilter.setOnCheckedChangeListener { _, isChecked ->
             if(isChecked) {
+                FILTER_OPTION = Config.OPTION_HEART
                 binding.linearLayoutFilterOptions.visibility = View.VISIBLE
                 binding.imageViewHeartFilter.isEnabled = true
                 binding.imageViewLungFilter.isEnabled = true
-                handleFilterOption(FILTER_OPTION)
+                handleFilterOptionUI(FILTER_OPTION)
             } else {
+                FILTER_OPTION = Config.OPTION_UNFILTERED
                 binding.linearLayoutFilterOptions.visibility = View.GONE
                 binding.imageViewHeartFilter.isEnabled = false
                 binding.imageViewLungFilter.isEnabled = false
             }
+
+            if(AUSCULTATION_STATUS == Config.AUSCULTATION_RECORDING) sendFilterCommand()
         }
 
         binding.imageViewHeartFilter.setOnClickListener {
-            FILTER_OPTION = false
-            handleFilterOption(FILTER_OPTION)
+            FILTER_OPTION = Config.OPTION_HEART
+            handleFilterOptionUI(FILTER_OPTION)
+            if(AUSCULTATION_STATUS == Config.AUSCULTATION_RECORDING) sendFilterCommand()
         }
 
         binding.imageViewLungFilter.setOnClickListener {
-            FILTER_OPTION = true
-            handleFilterOption(FILTER_OPTION)
+            FILTER_OPTION = Config.OPTION_LUNG
+            handleFilterOptionUI(FILTER_OPTION)
+            if(AUSCULTATION_STATUS == Config.AUSCULTATION_RECORDING) sendFilterCommand()
         }
     }
 
-    private fun handleFilterOption(condition: Boolean) {
-        if(!condition) { // If heart filter
+    private fun handleFilterOptionUI(condition: Int) {
+        if(condition == Config.OPTION_HEART) { // If heart filter
             binding.imageViewHeartFilter.filterSelected()
             binding.imageViewLungFilter.filterNormal()
-        } else { // If lung filter
+        } else if(condition == Config.OPTION_LUNG) { // If lung filter
             binding.imageViewLungFilter.filterSelected()
             binding.imageViewHeartFilter.filterNormal()
         }
@@ -150,23 +159,30 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
     private fun prepareActionControl() {
         binding.imageViewRecord.setOnClickListener {
             if(AUSCULTATION_STATUS == Config.AUSCULTATION_IDLE || AUSCULTATION_STATUS == Config.AUSCULTATION_PAUSED) {
+                if(!connectToUSB()) {
+                    return@setOnClickListener
+                }
+                usbIoManager.start()
+                sendFilterCommand()
                 AUSCULTATION_STATUS = Config.AUSCULTATION_RECORDING
             } else if (AUSCULTATION_STATUS == Config.AUSCULTATION_RECORDING) {
+                usbIoManager.stop()
                 AUSCULTATION_STATUS = Config.AUSCULTATION_PAUSED
             }
-            handleActionControl(AUSCULTATION_STATUS)
+            handleActionControlUI(AUSCULTATION_STATUS)
         }
 
         binding.imageViewStop.setOnClickListener {
+            usbIoManager.stop()
             AUSCULTATION_STATUS = Config.AUSCULTATION_PAUSED
-            handleActionControl(AUSCULTATION_STATUS)
+            handleActionControlUI(AUSCULTATION_STATUS)
             showSaveDialog()
         }
 
-        handleActionControl(AUSCULTATION_STATUS)
+        handleActionControlUI(AUSCULTATION_STATUS)
     }
 
-    private fun handleActionControl(condition: Int) {
+    private fun handleActionControlUI(condition: Int) {
         when(condition) {
             Config.AUSCULTATION_IDLE -> {
                 binding.imageViewStop.visibility = View.INVISIBLE
@@ -197,7 +213,7 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
             setView(editText)
             setPositiveButton("Simpan", DialogInterface.OnClickListener { dialog, which ->
                 AUSCULTATION_STATUS = Config.AUSCULTATION_IDLE
-                handleActionControl(AUSCULTATION_STATUS)
+                handleActionControlUI(AUSCULTATION_STATUS)
                 // TODO store audio file
 
                 startActivity(Intent(this@MainActivity, ListActivity::class.java))
@@ -207,7 +223,7 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
             })
             setNegativeButton("Jangan", DialogInterface.OnClickListener { dialog, which ->
                 AUSCULTATION_STATUS = Config.AUSCULTATION_IDLE
-                handleActionControl(AUSCULTATION_STATUS)
+                handleActionControlUI(AUSCULTATION_STATUS)
                 // TODO clear audio buffer
             })
             create()
@@ -215,33 +231,38 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
         saveDialog.show()
     }
 
-    private fun usbConnection() {
+    private fun connectToUSB(): Boolean {
         val manager = getSystemService(Context.USB_SERVICE) as UsbManager
         val availableDrivers: List<UsbSerialDriver> = UsbSerialProber.getDefaultProber()
             .findAllDrivers(manager)
         if (availableDrivers.isEmpty()) {
             Log.d(TAG, "No drivers detected!")
-            return
+            toast("Driver/USB tidak ditemukan!")
+            return false
         }
 
         val driver = availableDrivers[0]
+        val device = driver.device
         val connection = manager.openDevice(driver.device)
         if (connection == null) {
             requestUsbPermission(manager, driver)
-            return
+            return false
         } else {
+            val information = "Device id: ${device.deviceId}\nDevice Name: ${device.deviceName}"
             Log.d(TAG, "Driver connected!")
+            Log.d(TAG, information)
         }
 
         // Create a connection
         port = driver.ports[0]
         port.open(connection)
-        port.setParameters(BAUD_RATE, DATA_BITS, UsbSerialPort.STOPBITS_1,
+        port.setParameters(Config.BAUD_RATE, DATA_BITS, UsbSerialPort.STOPBITS_1,
             UsbSerialPort.PARITY_NONE)
 
         // Trying to read from Arduino
-        val usbIoManager = SerialInputOutputManager(port, this)
-        usbIoManager.start()
+        usbIoManager = SerialInputOutputManager(port, this)
+//        usbIoManager.start()
+        return true
     }
 
     private fun requestUsbPermission(manager: UsbManager, driver: UsbSerialDriver) {
@@ -258,6 +279,7 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
                             }
                         } else {
                             Log.d(TAG, "permission denied for device $device")
+                            toast("Permission tidak diberikan, tolong restart aplikasi!")
                         }
 
                     }
@@ -271,13 +293,24 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
         manager.requestPermission(driver.device, permissionIntent)
     }
 
+    private fun sendFilterCommand() {
+        when(FILTER_OPTION) {
+            Config.OPTION_UNFILTERED -> {
+                port.write(Config.COMMAND_FILTER_UNFILTERED, WRITE_WAIT_MILLIS)
+            }
+            Config.OPTION_HEART -> {
+                port.write(Config.COMMAND_FILTER_HEART, WRITE_WAIT_MILLIS)
+            }
+            Config.OPTION_LUNG -> {
+                port.write(Config.COMMAND_FILTER_LUNG, WRITE_WAIT_MILLIS)
+            }
+        }
+    }
+
     override fun onNewData(data: ByteArray?) {
+//        onNewDataDiagnostic(data)
         for (i in data!!.indices) {
             when (val intVal = data[i].toInt()) {
-//                in 48..57 -> {
-//                    val c = intVal.toChar()
-//                    serialBuffer += c
-//                }
                 10 -> { // New Line
                     NL_active = true
                 }
@@ -291,26 +324,22 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
             }
 
             if(NL_active && CR_active) {
-                val serialValue = serialBuffer.toFloatOrNull()
+                val serialValue = serialBuffer.toUIntOrNull()
                 serialBuffer = ""
                 CR_active = false
                 NL_active = false
                 if(serialValue == null) continue
-//                val limitValue = serialValue and MAX_ADC_RESOLUTION
-//                val voltageVal: Float = limitValue.toFloat() * ADC_VOLTAGE_REF.toFloat() / MAX_ADC_RESOLUTION.toFloat()
-//                lineDataSet.addEntry(Entry(lineDataSet.entryCount.toFloat(), voltageVal))
-                lineDataSet.addEntry(Entry(lineDataSet.entryCount.toFloat(), serialValue))
+                val limitValue = serialValue and MAX_ADC_RESOLUTION
+                val voltageVal: Float = limitValue.toFloat() * ADC_VOLTAGE_REF.toFloat() / MAX_ADC_RESOLUTION.toFloat()
+                lineDataSet.addEntry(Entry(lineDataSet.entryCount.toFloat(), voltageVal))
+//                lineDataSet.addEntry(Entry(lineDataSet.entryCount.toFloat(), serialValue))
             }
         }
     }
 
     private fun onNewDataDiagnostic(data: ByteArray?) {
         Log.d(TAG, "Data size: ${data!!.size}")
-        for (i in data.indices) {
-            Log.d(TAG, "data[$i]: ${data[i].toUByte()}")
-        }
-        val realValue = (data[0].toUByte() * 256u) + data[1].toUByte()
-        Log.d(TAG, "Data value: $realValue")
+        Log.d(TAG, "Received data: ${data.toString(Charsets.US_ASCII)}")
     }
 
     override fun onRunError(e: Exception?) {
@@ -328,11 +357,11 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
                 return String.format("%d:%02d", minutes, seconds)
             }
         }
-        binding.chart.axisLeft.valueFormatter = object: ValueFormatter() {
-            override fun getAxisLabel(value: Float, axis: AxisBase?): String {
-                return mapToOutput(value).toString()
-            }
-        }
+//        binding.chart.axisLeft.valueFormatter = object: ValueFormatter() {
+//            override fun getAxisLabel(value: Float, axis: AxisBase?): String {
+//                return mapToOutput(value).toString()
+//            }
+//        }
         binding.chart.data = lineData
         binding.chart.invalidate()
         refreshGraphPeriodically()
@@ -376,5 +405,9 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
 
     private fun mapToOutput(input: Float): Float {
         return (input - IN_MIN) * (OUT_MAX - OUT_MIN) / (IN_MAX - IN_MIN) + OUT_MIN
+    }
+
+    private fun toast(text: String) {
+        Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
     }
 }
