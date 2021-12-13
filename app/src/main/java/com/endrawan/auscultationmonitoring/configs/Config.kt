@@ -1,4 +1,4 @@
-package com.endrawan.auscultationmonitoring
+package com.endrawan.auscultationmonitoring.configs
 
 object Config {
     val AUSCULTATION_IDLE = 0

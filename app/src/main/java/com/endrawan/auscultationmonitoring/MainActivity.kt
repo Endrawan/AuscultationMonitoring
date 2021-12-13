@@ -26,7 +26,6 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.EditText
-import android.widget.Toast
 
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
@@ -35,7 +34,7 @@ import com.endrawan.auscultationmonitoring.extensions.filterSelected
 import com.github.mikephil.charting.components.AxisBase
 import com.github.mikephil.charting.formatter.ValueFormatter
 import android.content.DialogInterface
-import androidx.core.view.marginStart
+import com.endrawan.auscultationmonitoring.configs.Config
 
 
 class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
