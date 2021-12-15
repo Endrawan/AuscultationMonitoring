@@ -16,4 +16,5 @@ object Config {
     val COMMAND_FILTER_LUNG = "2".toByteArray()
 
     val BAUD_RATE = 500000
+    val AUDIO_FREQUENCY = 4000
 }

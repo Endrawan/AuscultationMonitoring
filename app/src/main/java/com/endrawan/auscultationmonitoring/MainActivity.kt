@@ -34,8 +34,10 @@ import com.endrawan.auscultationmonitoring.extensions.filterSelected
 import com.github.mikephil.charting.components.AxisBase
 import com.github.mikephil.charting.formatter.ValueFormatter
 import android.content.DialogInterface
+import android.media.*
 import android.widget.Toast
 import com.endrawan.auscultationmonitoring.configs.Config
+import com.endrawan.auscultationmonitoring.configs.Config.AUDIO_FREQUENCY
 import com.endrawan.auscultationmonitoring.configs.Config.WRITE_WAIT_MILLIS
 
 
@@ -54,9 +56,9 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
     private lateinit var port: UsbSerialPort
     private lateinit var usbIoManager: SerialInputOutputManager
 
-    private val DATA_FREQUENCY = 4000 //100
+//    private val DATA_FREQUENCY = 4000 //100
     private val REFRESH_DATA_INTERVAL: Long = 200 // 0.2 Seconds
-    private val CHART_X_RANGE_VISIBILITY = 2 * DATA_FREQUENCY //8000
+    private val CHART_X_RANGE_VISIBILITY = 2 * AUDIO_FREQUENCY //8000
     private val CHART_Y_RANGE_VISIBILITY = 4f //1024f
     private val MAX_ADC_RESOLUTION = 1023u
     private val ADC_VOLTAGE_REF = 5u
@@ -74,6 +76,10 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
     private var FILTER_OPTION = Config.OPTION_UNFILTERED
     private var AUSCULTATION_STATUS = Config.AUSCULTATION_IDLE
 
+    private lateinit var audioBuffer: ShortArray
+    private var minBufferSize: Int = 0
+    private lateinit var audioTrack: AudioTrack
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
@@ -84,10 +90,13 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
         prepareToolbar()
         prepareFilterOption()
         prepareActionControl()
+        prepareAudio()
         prepareGraph()
 
 //        usbConnection()
         lineDataSet.addEntry(Entry(lineDataSet.entryCount.toFloat(), 0f))
+        audioBuffer[0] = 0
+        Log.d(TAG, "Entry count now: ${lineDataSet.entryCount}")
 //        addNewDataPeriodically()
     }
 
@@ -216,6 +225,7 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
                 handleActionControlUI(AUSCULTATION_STATUS)
                 // TODO store audio file
 
+                clearGraph()
                 startActivity(Intent(this@MainActivity, ListActivity::class.java))
             })
             setNeutralButton("Kembali", DialogInterface.OnClickListener { dialog, which ->
@@ -224,7 +234,7 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
             setNegativeButton("Jangan", DialogInterface.OnClickListener { dialog, which ->
                 AUSCULTATION_STATUS = Config.AUSCULTATION_IDLE
                 handleActionControlUI(AUSCULTATION_STATUS)
-                // TODO clear audio buffer
+                clearGraph()
             })
             create()
         }
@@ -308,15 +318,10 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
     }
 
     override fun onNewData(data: ByteArray?) {
-//        onNewDataDiagnostic(data)
         for (i in data!!.indices) {
             when (val intVal = data[i].toInt()) {
-                10 -> { // New Line
-                    NL_active = true
-                }
-                13 -> {
-                    CR_active = true
-                }
+                10 -> NL_active = true
+                13 -> CR_active = true
                 else -> {
                     val c = intVal.toChar()
                     serialBuffer += c
@@ -324,15 +329,22 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
             }
 
             if(NL_active && CR_active) {
-                val serialValue = serialBuffer.toUIntOrNull()
+                val serialValue = serialBuffer.toShortOrNull()
                 serialBuffer = ""
                 CR_active = false
                 NL_active = false
+
                 if(serialValue == null) continue
-                val limitValue = serialValue and MAX_ADC_RESOLUTION
-                val voltageVal: Float = limitValue.toFloat() * ADC_VOLTAGE_REF.toFloat() / MAX_ADC_RESOLUTION.toFloat()
-                lineDataSet.addEntry(Entry(lineDataSet.entryCount.toFloat(), voltageVal))
-//                lineDataSet.addEntry(Entry(lineDataSet.entryCount.toFloat(), serialValue))
+
+                val n = lineDataSet.entryCount
+                lineDataSet.addEntry(Entry(n.toFloat(), serialValue.toFloat()))
+
+                val idx = n % minBufferSize
+                audioBuffer[idx] = convertToAudioSample(serialValue)
+                if(idx == minBufferSize - 1) {
+//                    Log.d(TAG, "Stream audio called idx= $idx")
+                    streamAudio(audioBuffer)
+                }
             }
         }
     }
@@ -346,25 +358,66 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
         Log.d(TAG, "Exception found: ${e?.message}")
     }
 
+    private fun prepareAudio() {
+        minBufferSize = AudioRecord.getMinBufferSize(
+            AUDIO_FREQUENCY,
+            AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT)
+
+        Log.d(TAG, "Min Buffer Size: $minBufferSize")
+
+        audioBuffer = ShortArray(minBufferSize)
+
+        audioTrack = AudioTrack(
+            AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .build(),
+            AudioFormat.Builder()
+                .setSampleRate(AUDIO_FREQUENCY)
+                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build(),
+            minBufferSize,
+            AudioTrack.MODE_STREAM,
+            AudioManager.AUDIO_SESSION_ID_GENERATE)
+        audioTrack.playbackRate = AUDIO_FREQUENCY
+        audioTrack.play()
+    }
+
+    private fun streamAudio(audioData: ShortArray) {
+        val streamAudioHandler = Handler(Looper.getMainLooper())
+        val streamAudioCode = Runnable {
+            audioTrack.write(audioData, 0, minBufferSize)
+        }
+        streamAudioHandler.post(streamAudioCode)
+    }
+
     private fun prepareGraph() {
         styleLineDataSet()
-        binding.chart.xAxis.granularity = DATA_FREQUENCY.toFloat()
+        binding.chart.xAxis.granularity = AUDIO_FREQUENCY.toFloat()
         binding.chart.xAxis.valueFormatter = object: ValueFormatter() {
             override fun getAxisLabel(value: Float, axis: AxisBase?): String {
-                val rawSeconds = (value / DATA_FREQUENCY).toInt()
+                val rawSeconds = (value / AUDIO_FREQUENCY).toInt()
                 val seconds = rawSeconds % 60
                 val minutes = rawSeconds / 60
                 return String.format("%d:%02d", minutes, seconds)
             }
         }
-//        binding.chart.axisLeft.valueFormatter = object: ValueFormatter() {
-//            override fun getAxisLabel(value: Float, axis: AxisBase?): String {
-//                return mapToOutput(value).toString()
-//            }
-//        }
+        binding.chart.axisLeft.valueFormatter = object: ValueFormatter() {
+            override fun getAxisLabel(value: Float, axis: AxisBase?): String {
+                val voltageVal: Float = value * ADC_VOLTAGE_REF.toFloat() / MAX_ADC_RESOLUTION.toFloat()
+                return String.format("%.2f", voltageVal)
+            }
+        }
         binding.chart.data = lineData
         binding.chart.invalidate()
         refreshGraphPeriodically()
+    }
+
+    private fun clearGraph() {
+        lineDataSet.clear()
+        binding.chart.invalidate()
+//        binding.chart.clear()
     }
 
     private fun styleLineDataSet() {
@@ -405,6 +458,11 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
 
     private fun mapToOutput(input: Float): Float {
         return (input - IN_MIN) * (OUT_MAX - OUT_MIN) / (IN_MAX - IN_MIN) + OUT_MIN
+    }
+
+    private fun convertToAudioSample(raw: Short): Short {
+        val pcm16bit = (raw - 512) shl 6
+        return pcm16bit.toShort()
     }
 
     private fun toast(text: String) {
