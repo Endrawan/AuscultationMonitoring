@@ -17,4 +17,6 @@ object Config {
 
     val BAUD_RATE = 500000
     val AUDIO_FREQUENCY = 4000
+
+    val TEMP_FILENAME = "temp.pcm"
 }

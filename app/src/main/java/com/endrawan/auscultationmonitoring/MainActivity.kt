@@ -38,7 +38,14 @@ import android.media.*
 import android.widget.Toast
 import com.endrawan.auscultationmonitoring.configs.Config
 import com.endrawan.auscultationmonitoring.configs.Config.AUDIO_FREQUENCY
+import com.endrawan.auscultationmonitoring.configs.Config.TEMP_FILENAME
 import com.endrawan.auscultationmonitoring.configs.Config.WRITE_WAIT_MILLIS
+import com.endrawan.auscultationmonitoring.helpers.AudioHelper
+import java.io.BufferedOutputStream
+import java.io.DataOutputStream
+import java.io.File
+import java.io.FileOutputStream
+import kotlin.experimental.and
 
 
 class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
@@ -75,10 +82,14 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
 
     private var FILTER_OPTION = Config.OPTION_UNFILTERED
     private var AUSCULTATION_STATUS = Config.AUSCULTATION_IDLE
+//    private var isIdle = true
 
     private lateinit var audioBuffer: ShortArray
     private var minBufferSize: Int = 0
     private lateinit var audioTrack: AudioTrack
+    private lateinit var dataOutputStream: DataOutputStream
+    private lateinit var tempFile: File
+    private lateinit var audioHelper: AudioHelper
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -91,6 +102,7 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
         prepareFilterOption()
         prepareActionControl()
         prepareAudio()
+//        prepareFile()
         prepareGraph()
 
 //        usbConnection()
@@ -171,6 +183,9 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
                 if(!connectToUSB()) {
                     return@setOnClickListener
                 }
+                if(AUSCULTATION_STATUS == Config.AUSCULTATION_IDLE) {
+                    prepareFile()
+                }
                 usbIoManager.start()
                 sendFilterCommand()
                 AUSCULTATION_STATUS = Config.AUSCULTATION_RECORDING
@@ -221,11 +236,23 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
             setTitle("Simpan rekaman?")
             setView(editText)
             setPositiveButton("Simpan", DialogInterface.OnClickListener { dialog, which ->
-                AUSCULTATION_STATUS = Config.AUSCULTATION_IDLE
-                handleActionControlUI(AUSCULTATION_STATUS)
-                // TODO store audio file
+                // TODO coba save
+                val wavFileName = editText.text.toString() + ".wav"
+                val wavFile = File(getExternalFilesDir(null), wavFileName)
+                if(wavFile.exists()) {
+                    toast("Terdapat file dengan nama yang sama!")
+                    return@OnClickListener
+                }
+                wavFile.createNewFile()
+                audioHelper.pcmToWav2(tempFile, wavFile)
+                dataOutputStream.close()
+                tempFile.delete()
 
                 clearGraph()
+
+                AUSCULTATION_STATUS = Config.AUSCULTATION_IDLE
+                handleActionControlUI(AUSCULTATION_STATUS)
+
                 startActivity(Intent(this@MainActivity, ListActivity::class.java))
             })
             setNeutralButton("Kembali", DialogInterface.OnClickListener { dialog, which ->
@@ -234,6 +261,8 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
             setNegativeButton("Jangan", DialogInterface.OnClickListener { dialog, which ->
                 AUSCULTATION_STATUS = Config.AUSCULTATION_IDLE
                 handleActionControlUI(AUSCULTATION_STATUS)
+                dataOutputStream.close()
+                tempFile.delete()
                 clearGraph()
             })
             create()
@@ -342,8 +371,8 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
                 val idx = n % minBufferSize
                 audioBuffer[idx] = convertToAudioSample(serialValue)
                 if(idx == minBufferSize - 1) {
-//                    Log.d(TAG, "Stream audio called idx= $idx")
                     streamAudio(audioBuffer)
+                    writeAudio(audioBuffer)
                 }
             }
         }
@@ -382,6 +411,7 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
             AudioManager.AUDIO_SESSION_ID_GENERATE)
         audioTrack.playbackRate = AUDIO_FREQUENCY
         audioTrack.play()
+        audioHelper = AudioHelper(AudioFormat.CHANNEL_OUT_MONO, AUDIO_FREQUENCY, minBufferSize)
     }
 
     private fun streamAudio(audioData: ShortArray) {
@@ -390,6 +420,19 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
             audioTrack.write(audioData, 0, minBufferSize)
         }
         streamAudioHandler.post(streamAudioCode)
+    }
+
+    private fun writeAudio(audioData: ShortArray) {
+        val writeAudioHandler = Handler(Looper.getMainLooper())
+        val writeAudioCode = Runnable {
+            for(a in audioData) {
+                val littleEndian = ByteArray(2)
+                littleEndian[0] = (a.toInt() and 0xFF).toByte()
+                littleEndian[1] = ((a.toInt() shr 8) and 0xFF).toByte()
+                dataOutputStream.write(littleEndian)
+            }
+        }
+        writeAudioHandler.post(writeAudioCode)
     }
 
     private fun prepareGraph() {
@@ -454,6 +497,15 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
             }
         }
         refreshDataHandler.post(refreshDataCode)
+    }
+
+    private fun prepareFile() {
+        tempFile = File(getExternalFilesDir(null), TEMP_FILENAME)
+        if (tempFile.exists()) {
+            tempFile.delete()
+        }
+        tempFile.createNewFile()
+        dataOutputStream = DataOutputStream(BufferedOutputStream(FileOutputStream(tempFile)))
     }
 
     private fun mapToOutput(input: Float): Float {
