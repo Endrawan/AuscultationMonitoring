@@ -35,17 +35,19 @@ import com.github.mikephil.charting.components.AxisBase
 import com.github.mikephil.charting.formatter.ValueFormatter
 import android.content.DialogInterface
 import android.media.*
+import android.text.InputType
 import android.widget.Toast
 import com.endrawan.auscultationmonitoring.configs.Config
+import com.endrawan.auscultationmonitoring.configs.Config.ACTION_USB_PERMISSION
 import com.endrawan.auscultationmonitoring.configs.Config.AUDIO_FREQUENCY
 import com.endrawan.auscultationmonitoring.configs.Config.TEMP_FILENAME
 import com.endrawan.auscultationmonitoring.configs.Config.WRITE_WAIT_MILLIS
 import com.endrawan.auscultationmonitoring.helpers.AudioHelper
+import com.endrawan.auscultationmonitoring.helpers.UsbHelper
 import java.io.BufferedOutputStream
 import java.io.DataOutputStream
 import java.io.File
 import java.io.FileOutputStream
-import kotlin.experimental.and
 
 
 class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
@@ -56,14 +58,9 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
     private var NL_active = false
     private var serialBuffer = ""
 
-//    private val BAUD_RATE = 1000000 //250000
-    private val DATA_BITS = 8
     private val TAG = "MainActivity"
-    private val ACTION_USB_PERMISSION = "com.android.example.USB_PERMISSION"
-    private lateinit var port: UsbSerialPort
-    private lateinit var usbIoManager: SerialInputOutputManager
+    private lateinit var usbHelper: UsbHelper
 
-//    private val DATA_FREQUENCY = 4000 //100
     private val REFRESH_DATA_INTERVAL: Long = 200 // 0.2 Seconds
     private val CHART_X_RANGE_VISIBILITY = 2 * AUDIO_FREQUENCY //8000
     private val CHART_Y_RANGE_VISIBILITY = 4f //1024f
@@ -72,17 +69,11 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
 
     private val ADD_DATA_INTERVAL : Long = 10 // ms
 
-    private val IN_MIN = -1
-    private val IN_MAX = 1
-    private val OUT_MIN = 0
-    private val OUT_MAX = 4
-
     private val lineDataSet = LineDataSet(ArrayList<Entry>(), "Recorded Data")
     private val lineData = LineData(lineDataSet)
 
     private var FILTER_OPTION = Config.OPTION_UNFILTERED
     private var AUSCULTATION_STATUS = Config.AUSCULTATION_IDLE
-//    private var isIdle = true
 
     private lateinit var audioBuffer: ShortArray
     private var minBufferSize: Int = 0
@@ -102,19 +93,18 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
         prepareFilterOption()
         prepareActionControl()
         prepareAudio()
-//        prepareFile()
         prepareGraph()
 
-//        usbConnection()
+
+        usbHelper = UsbHelper(this)
         lineDataSet.addEntry(Entry(lineDataSet.entryCount.toFloat(), 0f))
         audioBuffer[0] = 0
         Log.d(TAG, "Entry count now: ${lineDataSet.entryCount}")
-//        addNewDataPeriodically()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        port.close()
+        usbHelper.port?.close()
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
@@ -180,24 +170,24 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
     private fun prepareActionControl() {
         binding.imageViewRecord.setOnClickListener {
             if(AUSCULTATION_STATUS == Config.AUSCULTATION_IDLE || AUSCULTATION_STATUS == Config.AUSCULTATION_PAUSED) {
-                if(!connectToUSB()) {
+                if(!usbHelper.connectToUSB(this)) {
                     return@setOnClickListener
                 }
                 if(AUSCULTATION_STATUS == Config.AUSCULTATION_IDLE) {
                     prepareFile()
                 }
-                usbIoManager.start()
+                usbHelper.usbIoManager.start()
                 sendFilterCommand()
                 AUSCULTATION_STATUS = Config.AUSCULTATION_RECORDING
             } else if (AUSCULTATION_STATUS == Config.AUSCULTATION_RECORDING) {
-                usbIoManager.stop()
+                usbHelper.usbIoManager.stop()
                 AUSCULTATION_STATUS = Config.AUSCULTATION_PAUSED
             }
             handleActionControlUI(AUSCULTATION_STATUS)
         }
 
         binding.imageViewStop.setOnClickListener {
-            usbIoManager.stop()
+            usbHelper.usbIoManager.stop()
             AUSCULTATION_STATUS = Config.AUSCULTATION_PAUSED
             handleActionControlUI(AUSCULTATION_STATUS)
             showSaveDialog()
@@ -229,14 +219,14 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
     private fun showSaveDialog() {
         val editText = EditText(this).apply {
             hint = "Nama audio anda.."
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PERSON_NAME
             width = 200
         }
         val saveDialog = AlertDialog.Builder(this)
         saveDialog.apply {
             setTitle("Simpan rekaman?")
             setView(editText)
-            setPositiveButton("Simpan", DialogInterface.OnClickListener { dialog, which ->
-                // TODO coba save
+            setPositiveButton("Simpan", DialogInterface.OnClickListener { _, _ ->
                 val wavFileName = editText.text.toString() + ".wav"
                 val wavFile = File(getExternalFilesDir(null), wavFileName)
                 if(wavFile.exists()) {
@@ -244,7 +234,7 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
                     return@OnClickListener
                 }
                 wavFile.createNewFile()
-                audioHelper.pcmToWav2(tempFile, wavFile)
+                audioHelper.pcmToWav(tempFile, wavFile)
                 dataOutputStream.close()
                 tempFile.delete()
 
@@ -255,93 +245,31 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
 
                 startActivity(Intent(this@MainActivity, ListActivity::class.java))
             })
-            setNeutralButton("Kembali", DialogInterface.OnClickListener { dialog, which ->
 
-            })
-            setNegativeButton("Jangan", DialogInterface.OnClickListener { dialog, which ->
+            setNeutralButton("Kembali") { _, _ -> }
+
+            setNegativeButton("Jangan") { _, _ ->
                 AUSCULTATION_STATUS = Config.AUSCULTATION_IDLE
                 handleActionControlUI(AUSCULTATION_STATUS)
                 dataOutputStream.close()
                 tempFile.delete()
                 clearGraph()
-            })
+            }
             create()
         }
         saveDialog.show()
     }
 
-    private fun connectToUSB(): Boolean {
-        val manager = getSystemService(Context.USB_SERVICE) as UsbManager
-        val availableDrivers: List<UsbSerialDriver> = UsbSerialProber.getDefaultProber()
-            .findAllDrivers(manager)
-        if (availableDrivers.isEmpty()) {
-            Log.d(TAG, "No drivers detected!")
-            toast("Driver/USB tidak ditemukan!")
-            return false
-        }
-
-        val driver = availableDrivers[0]
-        val device = driver.device
-        val connection = manager.openDevice(driver.device)
-        if (connection == null) {
-            requestUsbPermission(manager, driver)
-            return false
-        } else {
-            val information = "Device id: ${device.deviceId}\nDevice Name: ${device.deviceName}"
-            Log.d(TAG, "Driver connected!")
-            Log.d(TAG, information)
-        }
-
-        // Create a connection
-        port = driver.ports[0]
-        port.open(connection)
-        port.setParameters(Config.BAUD_RATE, DATA_BITS, UsbSerialPort.STOPBITS_1,
-            UsbSerialPort.PARITY_NONE)
-
-        // Trying to read from Arduino
-        usbIoManager = SerialInputOutputManager(port, this)
-//        usbIoManager.start()
-        return true
-    }
-
-    private fun requestUsbPermission(manager: UsbManager, driver: UsbSerialDriver) {
-        val usbReceiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                if (ACTION_USB_PERMISSION == intent.action) {
-                    synchronized(this) {
-                        val device: UsbDevice? = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
-
-                        if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
-                            device?.apply {
-                                //call method to set up device communication
-                                Log.d(TAG, "permission granted for device $device")
-                            }
-                        } else {
-                            Log.d(TAG, "permission denied for device $device")
-                            toast("Permission tidak diberikan, tolong restart aplikasi!")
-                        }
-
-                    }
-                }
-            }
-        }
-        val permissionIntent =
-            PendingIntent.getBroadcast(this, 0, Intent(ACTION_USB_PERMISSION), 0)
-        val filter = IntentFilter(ACTION_USB_PERMISSION)
-        registerReceiver(usbReceiver, filter)
-        manager.requestPermission(driver.device, permissionIntent)
-    }
-
     private fun sendFilterCommand() {
         when(FILTER_OPTION) {
             Config.OPTION_UNFILTERED -> {
-                port.write(Config.COMMAND_FILTER_UNFILTERED, WRITE_WAIT_MILLIS)
+                usbHelper.port?.write(Config.COMMAND_FILTER_UNFILTERED, WRITE_WAIT_MILLIS)
             }
             Config.OPTION_HEART -> {
-                port.write(Config.COMMAND_FILTER_HEART, WRITE_WAIT_MILLIS)
+                usbHelper.port?.write(Config.COMMAND_FILTER_HEART, WRITE_WAIT_MILLIS)
             }
             Config.OPTION_LUNG -> {
-                port.write(Config.COMMAND_FILTER_LUNG, WRITE_WAIT_MILLIS)
+                usbHelper.port?.write(Config.COMMAND_FILTER_LUNG, WRITE_WAIT_MILLIS)
             }
         }
     }
@@ -371,8 +299,8 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
                 val idx = n % minBufferSize
                 audioBuffer[idx] = convertToAudioSample(serialValue)
                 if(idx == minBufferSize - 1) {
-                    streamAudio(audioBuffer)
-                    writeAudio(audioBuffer)
+                    audioHelper.streamAudio(audioBuffer, audioTrack)
+                    audioHelper.writeAudio(audioBuffer, dataOutputStream)
                 }
             }
         }
@@ -393,8 +321,6 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
             AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT)
 
-        Log.d(TAG, "Min Buffer Size: $minBufferSize")
-
         audioBuffer = ShortArray(minBufferSize)
 
         audioTrack = AudioTrack(
@@ -412,27 +338,6 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
         audioTrack.playbackRate = AUDIO_FREQUENCY
         audioTrack.play()
         audioHelper = AudioHelper(AudioFormat.CHANNEL_OUT_MONO, AUDIO_FREQUENCY, minBufferSize)
-    }
-
-    private fun streamAudio(audioData: ShortArray) {
-        val streamAudioHandler = Handler(Looper.getMainLooper())
-        val streamAudioCode = Runnable {
-            audioTrack.write(audioData, 0, minBufferSize)
-        }
-        streamAudioHandler.post(streamAudioCode)
-    }
-
-    private fun writeAudio(audioData: ShortArray) {
-        val writeAudioHandler = Handler(Looper.getMainLooper())
-        val writeAudioCode = Runnable {
-            for(a in audioData) {
-                val littleEndian = ByteArray(2)
-                littleEndian[0] = (a.toInt() and 0xFF).toByte()
-                littleEndian[1] = ((a.toInt() shr 8) and 0xFF).toByte()
-                dataOutputStream.write(littleEndian)
-            }
-        }
-        writeAudioHandler.post(writeAudioCode)
     }
 
     private fun prepareGraph() {
@@ -460,7 +365,6 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
     private fun clearGraph() {
         lineDataSet.clear()
         binding.chart.invalidate()
-//        binding.chart.clear()
     }
 
     private fun styleLineDataSet() {
@@ -506,10 +410,6 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener{
         }
         tempFile.createNewFile()
         dataOutputStream = DataOutputStream(BufferedOutputStream(FileOutputStream(tempFile)))
-    }
-
-    private fun mapToOutput(input: Float): Float {
-        return (input - IN_MIN) * (OUT_MAX - OUT_MIN) / (IN_MAX - IN_MIN) + OUT_MIN
     }
 
     private fun convertToAudioSample(raw: Short): Short {

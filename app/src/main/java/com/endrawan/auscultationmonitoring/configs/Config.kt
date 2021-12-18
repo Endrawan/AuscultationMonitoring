@@ -16,7 +16,10 @@ object Config {
     val COMMAND_FILTER_LUNG = "2".toByteArray()
 
     val BAUD_RATE = 500000
+    val DATA_BITS = 8
     val AUDIO_FREQUENCY = 4000
 
     val TEMP_FILENAME = "temp.pcm"
+
+    val ACTION_USB_PERMISSION = "com.android.example.USB_PERMISSION"
 }
