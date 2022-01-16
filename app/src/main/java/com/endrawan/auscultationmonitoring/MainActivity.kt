@@ -203,10 +203,10 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener {
     }
 
     private fun handleFilterOptionUI(condition: Int) {
-        if (condition == Config.OPTION_HEART) { // If heart filter
+        if (condition == OPTION_HEART) { // If heart filter
             binding.imageViewHeartFilter.filterSelected()
             binding.imageViewLungFilter.filterNormal()
-        } else if (condition == Config.OPTION_LUNG) { // If lung filter
+        } else if (condition == OPTION_LUNG) { // If lung filter
             binding.imageViewLungFilter.filterSelected()
             binding.imageViewHeartFilter.filterNormal()
         }
@@ -546,7 +546,7 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener {
                 if ((index % AUDIO_FREQUENCY) == AUDIO_FREQUENCY - 1) { // If 1 second elapsed
                     val rr = lungCounterHelper.getRespirationRate()
 
-                    val description = "Respiration rate: $rr}"
+                    val description = "Respiration rate: $rr"
                     binding.textViewDescription.text = description
                 }
             }
@@ -558,15 +558,6 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener {
             }
         }
     }
-
-//    private fun calculateZScore(newData: Double) {
-//        val handler = Handler(Looper.getMainLooper())
-//        val runnable = Runnable {
-//            val result = smoothedZScore.update(newData)
-//            counterHelper.update(result.first)
-//        }
-//        handler.post(runnable)
-//    }
 
     private fun graphZScoreResult(result: Triple<Int, Double, Double>, mode: Int, index: Int) {
         val avgFilter = result.second.toFloat()

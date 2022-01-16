@@ -70,17 +70,19 @@ class CounterHelper(private val sampleFrequency: Int) {
     }
 
     fun getRespirationRate(): Int {
-        val totalSamplesInMinute = sampleFrequency * 60
-        val samplesThreshold = currentIndex - totalSamplesInMinute - 1
-        var peaksPerMinute = 0
-
-        peaksIndexes.forEach {
-            if(it >= samplesThreshold) {
-                peaksPerMinute++
-            }
-        }
-
-        return peaksPerMinute
+//        val totalSamplesInMinute = sampleFrequency * 60
+//        val samplesThreshold = currentIndex - totalSamplesInMinute - 1
+//        var peaksPerMinute = 0
+//
+//        peaksIndexes.forEach {
+//            if(it >= samplesThreshold) {
+//                peaksPerMinute++
+//            }
+//        }
+//
+//        return peaksPerMinute
+        filterPeaksIndexesToLastMinute()
+        return peaksIndexes.size
     }
 
     fun reset() {

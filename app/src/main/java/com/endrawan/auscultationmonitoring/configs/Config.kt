@@ -46,6 +46,6 @@ object Config {
     val HEART_Z_SCORE_INFLUENCE = 0.0
 
     val LUNG_Z_SCORE_LAG = 500
-    val LUNG_Z_SCORE_THRESHOLD = 8f
+    val LUNG_Z_SCORE_THRESHOLD = 6f
     val LUNG_Z_SCORE_INFLUENCE = 0.0
 }
