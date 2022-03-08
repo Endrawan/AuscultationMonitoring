@@ -1,9 +1,5 @@
 package com.endrawan.auscultationmonitoring.configs
 
-import kotlin.math.PI
-import kotlin.math.sin
-import kotlin.random.Random
-
 object Config {
     val AUSCULTATION_IDLE = 0
     val AUSCULTATION_RECORDING = 1
@@ -23,7 +19,13 @@ object Config {
     val DATA_BITS = 8
     val AUDIO_FREQUENCY = 4000
 
-    val TEMP_FILENAME = "temp.pcm"
+    val ACTUAL_MIN = 0
+    val ACTUAL_MAX = 1023
+
+    val TEMP_AUDIO_FILENAME = "temp_audio.pcm"
+    val TEMP_AVERAGE_FILENAME = "temp_average.pcm"
+    val TEMP_DEVIATION_FILENAME = "temp_deviation.pcm"
+    val TEMP_PEAK_FILENAME = "temp_peak.pcm"
 
     val ACTION_USB_PERMISSION = "com.android.example.USB_PERMISSION"
 
@@ -46,6 +48,6 @@ object Config {
     val HEART_Z_SCORE_INFLUENCE = 0.0
 
     val LUNG_Z_SCORE_LAG = 500
-    val LUNG_Z_SCORE_THRESHOLD = 6f
+    val LUNG_Z_SCORE_THRESHOLD = 5.5f
     val LUNG_Z_SCORE_INFLUENCE = 0.0
 }

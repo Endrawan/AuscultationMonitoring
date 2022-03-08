@@ -3,7 +3,6 @@ package com.endrawan.auscultationmonitoring.helpers
 import kotlin.math.sqrt
 
 class CounterHelper(private val sampleFrequency: Int) {
-
     private var peakStartIdx = 0
     private var peakEndIdx = 0
     private var lastPeakIdx = 0

@@ -69,22 +69,22 @@ class CounterActivity : AppCompatActivity() {
                 rawDataSet.addEntry(Entry(n.toFloat(), newData.toFloat()))
 
                 val result = smoothedZScore.update(newData.toDouble())
-                val peak = result.first.toFloat()
-                val avgFilter = result.second.toFloat()
-                val stdFilter = result.third.toFloat()
-
-                val peaksIndexes = counterHelper.update(result.first)
+//                val peak = result.first.toFloat()
+//                val avgFilter = result.second.toFloat()
+//                val stdFilter = result.third.toFloat()
+//
+//                val peaksIndexes = counterHelper.update(result.first)
 
 //                Log.d(TAG, "Peak detected: ${peaksIndexes.size}")
 //                peaksIndexes.forEachIndexed { index, value ->
 //                    Log.d(TAG, "Peak-$index = $value")
 //                }
 
-                avgFilterDataSet.addEntry(Entry(avgFilterDataSet.entryCount.toFloat(), avgFilter))
-                negativeStdDataSet.addEntry(Entry(negativeStdDataSet.entryCount.toFloat(), avgFilter - threshold * stdFilter))
-                positiveStdDataSet.addEntry(Entry(positiveStdDataSet.entryCount.toFloat(), avgFilter + threshold * stdFilter))
+                avgFilterDataSet.addEntry(Entry(avgFilterDataSet.entryCount.toFloat(), result.average.toFloat()))
+                negativeStdDataSet.addEntry(Entry(negativeStdDataSet.entryCount.toFloat(), result.getNegativeDeviation(threshold).toFloat()))
+                positiveStdDataSet.addEntry(Entry(positiveStdDataSet.entryCount.toFloat(), result.getPositiveDeviation(threshold).toFloat()))
 
-                peaksDataSet.addEntry(Entry(peaksDataSet.entryCount.toFloat(), peak))
+                peaksDataSet.addEntry(Entry(peaksDataSet.entryCount.toFloat(), result.peak.toFloat()))
 
                 refreshGraph()
                 if (n + 1 != Config.dummySignal.size) {

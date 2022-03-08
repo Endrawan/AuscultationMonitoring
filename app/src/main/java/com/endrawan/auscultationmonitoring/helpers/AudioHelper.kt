@@ -17,16 +17,29 @@ class AudioHelper(
     private val TAG = "AudioHelper"
 
     fun streamAudio(audioData: ShortArray, audioTrack: AudioTrack) {
-        val streamAudioHandler = Handler(Looper.getMainLooper())
-        val streamAudioCode = Runnable {
+//        val streamAudioHandler = Handler(Looper.getMainLooper())
+//        val streamAudioCode = Runnable {
+//            audioTrack.write(audioData, 0, minShortBufferSize)
+//        }
+//        streamAudioHandler.post(streamAudioCode)
+        val runnable = Runnable {
             audioTrack.write(audioData, 0, minShortBufferSize)
         }
-        streamAudioHandler.post(streamAudioCode)
+        Thread(runnable).start()
     }
 
     fun writeAudio(audioData: ShortArray, dataOutputStream: DataOutputStream) {
-        val writeAudioHandler = Handler(Looper.getMainLooper())
-        val writeAudioCode = Runnable {
+//        val writeAudioHandler = Handler(Looper.getMainLooper())
+//        val writeAudioCode = Runnable {
+//            for(a in audioData) {
+//                val littleEndian = ByteArray(2)
+//                littleEndian[0] = (a.toInt() and 0xFF).toByte()
+//                littleEndian[1] = ((a.toInt() shr 8) and 0xFF).toByte()
+//                dataOutputStream.write(littleEndian)
+//            }
+//        }
+//        writeAudioHandler.post(writeAudioCode)
+        val runnable = Runnable {
             for(a in audioData) {
                 val littleEndian = ByteArray(2)
                 littleEndian[0] = (a.toInt() and 0xFF).toByte()
@@ -34,7 +47,7 @@ class AudioHelper(
                 dataOutputStream.write(littleEndian)
             }
         }
-        writeAudioHandler.post(writeAudioCode)
+        Thread(runnable).start()
     }
 
     fun pcmToWav(pcmFile: File, wavFile: File) {
