@@ -1,8 +1,13 @@
 package com.endrawan.auscultationmonitoring.helpers
 
+import android.util.Log
+import com.endrawan.auscultationmonitoring.configs.Config.DEFAULT_MIN_SCOPE
+import kotlin.math.abs
 import kotlin.math.sqrt
 
-class CounterHelper(private val sampleFrequency: Int) {
+class CounterHelper(private val sampleFrequency: Int, private val type: Int) {
+    private val TAG = "CounterHelper"
+
     private var peakStartIdx = 0
     private var peakEndIdx = 0
     private var lastPeakIdx = 0
@@ -10,8 +15,24 @@ class CounterHelper(private val sampleFrequency: Int) {
     private var currentIndex = 0
     private val peaksIndexes = ArrayList<Int>()
 
+    // Exclusive for lung counter type
+    private var start_scope = 0
+    private var min_scope = DEFAULT_MIN_SCOPE
+
+    companion object {
+        val LUNG_TYPE = 2
+        val HEART_TYPE = 1
+    }
+
     fun update(zScoreOutput: Int): ArrayList<Int> {
-//        val result = smoothedZScore.update(sample)
+        return when(type) {
+            HEART_TYPE -> updateHeart(zScoreOutput)
+            LUNG_TYPE -> updateLung(zScoreOutput)
+            else -> peaksIndexes
+        }
+    }
+
+    private fun updateHeart(zScoreOutput: Int): ArrayList<Int> {
         val output = zScoreOutput
 
         if(output == 1 && prevOutput < 1) {
@@ -27,6 +48,16 @@ class CounterHelper(private val sampleFrequency: Int) {
         prevOutput = output
         currentIndex++
 
+        return peaksIndexes
+    }
+
+    private fun updateLung(zScoreOutput: Int): ArrayList<Int> {
+        if(abs(zScoreOutput) == 1 && currentIndex > start_scope) {
+            peaksIndexes.add(lastPeakIdx)
+            start_scope = currentIndex + min_scope
+            Log.d(TAG, "updateLung: index added $currentIndex")
+        }
+        currentIndex++
         return peaksIndexes
     }
 
@@ -90,6 +121,8 @@ class CounterHelper(private val sampleFrequency: Int) {
         lastPeakIdx = 0
         prevOutput = 0
         currentIndex = 0
+        start_scope = 0
+        min_scope = DEFAULT_MIN_SCOPE
         peaksIndexes.clear()
     }
 

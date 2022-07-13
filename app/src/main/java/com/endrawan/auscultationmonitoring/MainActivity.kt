@@ -99,19 +99,12 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener {
     private var AUSCULTATION_STATUS = Config.AUSCULTATION_IDLE
 
     private lateinit var audioBuffer: ShortArray
-//    private lateinit var signalBuffer:MutableList<Sample>
     private var minBufferSize: Int = 0
     private lateinit var audioTrack: AudioTrack
     private lateinit var audioHelper: AudioHelper
 
     private lateinit var tempAudioStream: DataOutputStream
     private lateinit var tempAudioFile: File
-//    private lateinit var tempAverageStream: DataOutputStream
-//    private lateinit var tempAverageFile: File
-//    private lateinit var tempDeviationStream: DataOutputStream
-//    private lateinit var tempDeviationFile: File
-//    private lateinit var tempPeakStream: DataOutputStream
-//    private lateinit var tempPeakFile: File
 
     private val heartZScore =
         SmoothedZScore(
@@ -122,15 +115,11 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener {
     private val lungZScore =
         SmoothedZScore(LUNG_Z_SCORE_LAG, LUNG_Z_SCORE_THRESHOLD.toDouble(), LUNG_Z_SCORE_INFLUENCE)
 
-    private val heartCounterHelper = CounterHelper(AUDIO_FREQUENCY)
-    private val lungCounterHelper = CounterHelper(AUDIO_FREQUENCY)
+    private val heartCounterHelper = CounterHelper(AUDIO_FREQUENCY, CounterHelper.HEART_TYPE)
+    private val lungCounterHelper = CounterHelper(AUDIO_FREQUENCY, CounterHelper.LUNG_TYPE)
 
     private val parameterHelper = ParameterHelper(heartZScore, lungZScore,
         heartCounterHelper, lungCounterHelper)
-
-//    private lateinit var parameterHelper: ParameterHelper
-
-//    private val dataHelper = DataHelper(this)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
@@ -146,12 +135,6 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener {
 
         usbHelper = UsbHelper(this)
         prepareDataset()
-
-//        signalDataSet.addEntry(Entry(signalDataSet.entryCount.toFloat(), 0f))
-//        audioBuffer[0] = 0
-
-//        drawZScoreResult(0.0)
-//        Log.d(TAG, "Entry count now: ${signalDataSet.entryCount}")
     }
 
     override fun onDestroy() {
@@ -183,8 +166,6 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener {
         signalDataSet.addEntry(Entry(firstIndex.toFloat(), 0f))
         audioBuffer[0] = 0
         parameterHelper.findParameter(Sample(0, 0.0), FILTER_OPTION)
-//        signalBuffer[0] = Sample(0, 0.0)
-//        updateParameter(firstIndex, 0.0)
     }
 
     private fun prepareFilterOption() {
@@ -384,6 +365,7 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener {
     }
 
     override fun onNewData(data: ByteArray?) {
+//        onNewDataDiagnostic(data)
         if(data == null) return
         for (i in data.indices) {
             when (val intVal = data[i].toInt()) {
@@ -410,14 +392,11 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener {
 
                 val idx = n % minBufferSize
                 audioBuffer[idx] = convertToAudioSample(serialValue)
-//                signalBuffer[idx] = Sample(n, serialValue.toDouble())
                 if (idx == minBufferSize - 1) {
                     audioHelper.streamAudio(audioBuffer, audioTrack)
                     audioHelper.writeAudio(audioBuffer, tempAudioStream)
-//                    parameterHelper.findParameter(signalBuffer, FILTER_OPTION)
                 }
                 parameterHelper.findParameter(Sample(n, serialValue.toDouble()), FILTER_OPTION)
-//                updateParameter(n, serialValue.toDouble())
             }
         }
     }
@@ -439,9 +418,6 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener {
         )
 
         audioBuffer = ShortArray(minBufferSize)
-//        signalBuffer = MutableList(minBufferSize) {
-//            Sample(0, 0.0)
-//        }
 
         audioTrack = AudioTrack(
             AudioAttributes.Builder()
@@ -515,8 +491,6 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener {
 
         peakDataSet.setDrawValues(false)
         peakDataSet.setDrawCircles(false)
-//        peakDataSet.setDrawFilled(false)
-//        peakDataSet.color = colorRed
     }
 
     private fun refreshGraphPeriodically() {
@@ -547,8 +521,8 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener {
         when (FILTER_OPTION) {
             OPTION_HEART -> {
                 val bpm = parameterHelper.getHeartRate()
-                val hrv = parameterHelper.getHRV()
-                val description = "Heart Rate: $bpm bpm, HRV: ${String.format("%.2f", hrv)} ms"
+//                val hrv = parameterHelper.getHRV()
+                val description = "Heart Rate: $bpm bpm"
                 binding.textViewDescription.text = description
             }
             OPTION_LUNG -> { // If 1 second elapsed
@@ -575,24 +549,8 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener {
     }
 
     private fun prepareFiles() {
-//        tempFile = File(getExternalFilesDir(null), TEMP_FILENAME)
-//        if (tempFile.exists()) {
-//            tempFile.delete()
-//        }
-//        tempFile.createNewFile()
-//        dataOutputStream = DataOutputStream(BufferedOutputStream(FileOutputStream(tempFile)))
-
         tempAudioFile = prepareFile(TEMP_AUDIO_FILENAME)
         tempAudioStream = prepareStream(tempAudioFile)
-
-//        tempAverageFile = prepareFile(TEMP_AVERAGE_FILENAME)
-//        tempAverageStream = prepareStream(tempAverageFile)
-//
-//        tempDeviationFile = prepareFile(TEMP_DEVIATION_FILENAME)
-//        tempDeviationStream = prepareStream(tempDeviationFile)
-//
-//        tempPeakFile = prepareFile(TEMP_PEAK_FILENAME)
-//        tempPeakStream = prepareStream(tempPeakFile)
     }
 
     private fun prepareFile(filename: String): File {
@@ -602,22 +560,10 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener {
         }
         file.createNewFile()
         return file
-//        return DataOutputStream(BufferedOutputStream(FileOutputStream(tempFile)))
     }
 
     private fun prepareStream(file: File): DataOutputStream {
         return DataOutputStream(BufferedOutputStream(FileOutputStream(file)))
-    }
-
-    private fun closeAllFileAndStream() {
-        tempAudioStream.close()
-        tempAudioFile.delete()
-//        tempAverageStream.close()
-//        tempAverageFile.delete()
-//        tempDeviationStream.close()
-//        tempDeviationFile.delete()
-//        tempPeakStream.close()
-//        tempPeakFile.delete()
     }
 
     private fun convertToAudioSample(raw: Short): Short {
@@ -628,41 +574,6 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener {
     private fun toast(text: String) {
         Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
     }
-
-//    private fun updateParameter(index: Int, newData: Double) {
-//        when (FILTER_OPTION) {
-//            OPTION_HEART -> {
-//                val result = heartZScore.update(newData)
-//                heartCounterHelper.update(result.first)
-////                graphZScoreResult(result, OPTION_HEART, index)
-//                if ((index % AUDIO_FREQUENCY) == AUDIO_FREQUENCY - 1) { // If 1 second elapsed
-//                    val bpm = heartCounterHelper.getHeartBpm()
-//                    val hrv = heartCounterHelper.getHrv()
-//
-//                    val description = "Heart Rate: $bpm bpm, HRV: ${String.format("%.2f", hrv)} ms"
-//                    binding.textViewDescription.text = description
-//                }
-//            }
-//            OPTION_LUNG -> {
-//                // Calculate respiration rate
-//                val result = lungZScore.update(newData)
-//                lungCounterHelper.update(result.first)
-////                graphZScoreResult(result, OPTION_LUNG, index)
-//                if ((index % AUDIO_FREQUENCY) == AUDIO_FREQUENCY - 1) { // If 1 second elapsed
-//                    val rr = lungCounterHelper.getRespirationRate()
-//
-//                    val description = "Respiration rate: $rr"
-//                    binding.textViewDescription.text = description
-//                }
-//            }
-//            OPTION_UNFILTERED -> {
-//                if ((index % AUDIO_FREQUENCY) == AUDIO_FREQUENCY - 1) { // If 1 second elapsed
-//                    val description = "Deskripsi audio"
-//                    binding.textViewDescription.text = description
-//                }
-//            }
-//        }
-//    }
 
     private fun graphZScoreResult(result: Triple<Int, Double, Double>, mode: Int, index: Int) {
         val avgFilter = result.second.toFloat()
@@ -681,29 +592,9 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener {
             else -> avgFilter - LUNG_Z_SCORE_THRESHOLD * stdFilter
         }
 
-//        avgFilterDataSet.addEntry(Entry(avgFilterDataSet.entryCount.toFloat(), avgFilter))
-//        negativeStdDataSet.addEntry(Entry(negativeStdDataSet.entryCount.toFloat(), negativeStd))
-//        positiveStdDataSet.addEntry(Entry(positiveStdDataSet.entryCount.toFloat(), positiveStd))
-//        peakDataSet.addEntry(Entry(peakDataSet.entryCount.toFloat(), peak))
-
         avgFilterDataSet.addEntry(Entry(index.toFloat(), avgFilter))
         negativeStdDataSet.addEntry(Entry(index.toFloat(), negativeStd))
         positiveStdDataSet.addEntry(Entry(index.toFloat(), positiveStd))
         peakDataSet.addEntry(Entry(index.toFloat(), peak))
     }
-
-    private fun saveZScoreResult(result: Triple<Int, Double, Double>, mode: Int, index: Int) {
-        val avgFilter = result.second.toFloat()
-        val stdFilter = result.third.toFloat()
-        val peak = result.first
-
-
-    }
-
-//    private fun resetCounter() {
-//        heartZScore.reset()
-//        heartCounterHelper.reset()
-//        lungZScore.reset()
-//        lungCounterHelper.reset()
-//    }
 }

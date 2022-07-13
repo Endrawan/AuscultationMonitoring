@@ -43,11 +43,14 @@ object Config {
 //        ran.nextInt(1023) * sin(2 * PI * freq * index / freq_sampling)
 //    }
 
+    val DEFAULT_BOUND = 30
+    val DEFAULT_MIN_SCOPE = 60 / DEFAULT_BOUND * AUDIO_FREQUENCY
+
     val HEART_Z_SCORE_LAG = 500
     val HEART_Z_SCORE_THRESHOLD = 8f
     val HEART_Z_SCORE_INFLUENCE = 0.0
 
-    val LUNG_Z_SCORE_LAG = 500
-    val LUNG_Z_SCORE_THRESHOLD = 5.5f
+    val LUNG_Z_SCORE_LAG = 200
+    val LUNG_Z_SCORE_THRESHOLD = 6f
     val LUNG_Z_SCORE_INFLUENCE = 0.0
 }

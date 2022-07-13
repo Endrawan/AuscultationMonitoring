@@ -32,7 +32,7 @@ class CounterActivity : AppCompatActivity() {
     private val influence = 0.0
 
     private val smoothedZScore = SmoothedZScore(lag, threshold.toDouble(), influence)
-    private val counterHelper = CounterHelper(AUDIO_FREQUENCY)
+    private val counterHelper = CounterHelper(AUDIO_FREQUENCY, CounterHelper.HEART_TYPE)
 
     private val rawDataSet = LineDataSet(ArrayList<Entry>(), "Raw Signal")
     private val avgFilterDataSet = LineDataSet(ArrayList<Entry>(), "AvgFilter")
