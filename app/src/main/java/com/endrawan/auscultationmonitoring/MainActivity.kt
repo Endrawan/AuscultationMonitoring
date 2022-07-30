@@ -148,14 +148,14 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener {
         return true
     }
 
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.list_item -> {
-                startActivity(Intent(this, ListActivity::class.java))
-            }
-        }
-        return super.onOptionsItemSelected(item)
-    }
+//    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+//        when (item.itemId) {
+//            R.id.list_item -> {
+//                startActivity(Intent(this, ListActivity::class.java))
+//            }
+//        }
+//        return super.onOptionsItemSelected(item)
+//    }
 
     private fun prepareToolbar() {
         setSupportActionBar(binding.toolbar)
@@ -242,7 +242,8 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener {
             usbHelper.usbIoManager.stop()
             AUSCULTATION_STATUS = Config.AUSCULTATION_PAUSED
             handleActionControlUI(AUSCULTATION_STATUS)
-            showSaveDialog()
+//            showSaveDialog()
+            stopAction()
         }
 
         handleActionControlUI(AUSCULTATION_STATUS)
@@ -338,12 +339,13 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener {
             setNeutralButton("Kembali") { _, _ -> }
 
             setNegativeButton("Jangan") { _, _ ->
-                AUSCULTATION_STATUS = Config.AUSCULTATION_IDLE
-                handleActionControlUI(AUSCULTATION_STATUS)
-                parameterHelper.reset()
-                tempAudioStream.close()
-                tempAudioFile.delete()
-                clearGraph()
+//                AUSCULTATION_STATUS = Config.AUSCULTATION_IDLE
+//                handleActionControlUI(AUSCULTATION_STATUS)
+//                parameterHelper.reset()
+//                tempAudioStream.close()
+//                tempAudioFile.delete()
+//                clearGraph()
+                stopAction()
             }
             create()
         }
@@ -596,5 +598,14 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener {
         negativeStdDataSet.addEntry(Entry(index.toFloat(), negativeStd))
         positiveStdDataSet.addEntry(Entry(index.toFloat(), positiveStd))
         peakDataSet.addEntry(Entry(index.toFloat(), peak))
+    }
+
+    private fun stopAction() {
+        AUSCULTATION_STATUS = Config.AUSCULTATION_IDLE
+        handleActionControlUI(AUSCULTATION_STATUS)
+        parameterHelper.reset()
+        tempAudioStream.close()
+        tempAudioFile.delete()
+        clearGraph()
     }
 }

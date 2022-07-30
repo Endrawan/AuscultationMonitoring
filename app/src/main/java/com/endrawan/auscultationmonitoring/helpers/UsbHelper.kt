@@ -7,8 +7,10 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
+import android.os.Build
 import android.util.Log
 import android.widget.Toast
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import com.endrawan.auscultationmonitoring.configs.Config.ACTION_USB_PERMISSION
 import com.endrawan.auscultationmonitoring.configs.Config.BAUD_RATE
@@ -58,8 +60,7 @@ class UsbHelper(val activity: AppCompatActivity) {
         return true
     }
 
-
-    fun requestUsbPermission(manager: UsbManager, driver: UsbSerialDriver) {
+    private fun requestUsbPermission(manager: UsbManager, driver: UsbSerialDriver) {
         val usbReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 if (ACTION_USB_PERMISSION == intent.action) {
@@ -73,15 +74,19 @@ class UsbHelper(val activity: AppCompatActivity) {
                             }
                         } else {
                             Log.d(TAG, "permission denied for device $device")
-                            toast("Permission tidak diberikan, tolong restart aplikasi!")
+                            toast("Permission belum diberikan, silahkan coba lagi!")
                         }
 
                     }
                 }
             }
         }
-        val permissionIntent =
+
+        val permissionIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PendingIntent.getBroadcast(activity, 0, Intent(ACTION_USB_PERMISSION), PendingIntent.FLAG_IMMUTABLE)
+        } else {
             PendingIntent.getBroadcast(activity, 0, Intent(ACTION_USB_PERMISSION), 0)
+        }
         val filter = IntentFilter(ACTION_USB_PERMISSION)
         activity.registerReceiver(usbReceiver, filter)
         manager.requestPermission(driver.device, permissionIntent)
