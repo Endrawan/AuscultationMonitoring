@@ -3,9 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.endrawan.auscultationmonitoring">
 
-    <uses-feature android:name="android.hardware.usb.host" /> <!-- <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" /> -->
-    <!-- <uses-permission android:name="android.permission.BLUETOOTH" /> -->
-    <!-- Request legacy Bluetooth permissions on older devices. -->
+    <uses-feature android:name="android.hardware.usb.host" />
+
     <uses-permission
         android:name="android.permission.BLUETOOTH"
         android:maxSdkVersion="30" />
@@ -21,8 +20,7 @@
     <uses-feature
         android:name="android.hardware.bluetooth"
         android:required="true" />
-
-    <uses-feature android:name="android.software.companion_device_setup"/>
+    <uses-feature android:name="android.software.companion_device_setup" />
 
     <application
         android:allowBackup="true"
@@ -31,10 +29,9 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.AuscultationMonitoring">
-
         <activity
-            android:name=".NewBluetoothActivity"
-            android:exported="true">
+            android:name=".NavigationActivity"
+            android:exported="true" >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
@@ -42,15 +39,23 @@
             </intent-filter>
         </activity>
         <activity
+            android:name=".MainBluetoothActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"/>
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:screenOrientation="landscape">
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".NewBluetoothActivity"
+            android:exported="false" />
+        <activity
             android:name=".BluetoothActivity"
-            android:exported="false" /> <!-- <activity -->
-        <!-- android:name=".CounterActivity" -->
-        <!-- android:exported="true" > -->
-        <!-- <intent-filter> -->
-        <!-- <action android:name="android.intent.action.MAIN" /> -->
-        <!-- <category android:name="android.intent.category.LAUNCHER" /> -->
-        <!-- </intent-filter> -->
-        <!-- </activity> -->
+            android:exported="false" />
         <activity
             android:name=".ListActivity"
             android:exported="false"

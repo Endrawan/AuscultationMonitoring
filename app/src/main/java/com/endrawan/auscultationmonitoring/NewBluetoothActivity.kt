@@ -20,13 +20,14 @@ import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.endrawan.auscultationmonitoring.bluetooth.BluetoothConnectionService
+import com.endrawan.auscultationmonitoring.callbacks.BluetoothCallbacks
 import com.endrawan.auscultationmonitoring.databinding.ActivityNewBluetoothBinding
 import java.nio.charset.Charset
 import java.util.*
 import java.util.regex.Pattern
 
 
-class NewBluetoothActivity : AppCompatActivity() {
+class NewBluetoothActivity : AppCompatActivity(), BluetoothCallbacks {
 
     private lateinit var binding:ActivityNewBluetoothBinding
 
@@ -93,7 +94,7 @@ class NewBluetoothActivity : AppCompatActivity() {
                     .setMessage("Bluetooth permission diperlukan.\nSilahkan coba lagi!")
                     .setPositiveButton(
                         "Berikan"
-                    ) { _, _ -> enableBluetooth() }
+                    ) { _, _ -> bluetoothEnableHandler() }
                     .setNegativeButton(
                         "Jangan"
                     ) { _, _ -> finish() }
@@ -133,15 +134,14 @@ class NewBluetoothActivity : AppCompatActivity() {
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.S)
     private fun askBluetoothPermissions() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            bluetoothPermissionsLauncher.launch(
-                arrayOf(
-                    Manifest.permission.BLUETOOTH_SCAN,
-                    Manifest.permission.BLUETOOTH_CONNECT
-                )
+        bluetoothPermissionsLauncher.launch(
+            arrayOf(
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_CONNECT
             )
-        }
+        )
     }
 
     private fun askEnableBluetooth() {
@@ -149,19 +149,19 @@ class NewBluetoothActivity : AppCompatActivity() {
         enableBluetoothLauncher.launch(enableBtIntent)
     }
 
-    private fun enableBluetooth() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            bluetoothPermissionsLauncher.launch(
-                arrayOf(
-                    Manifest.permission.BLUETOOTH_SCAN,
-                    Manifest.permission.BLUETOOTH_CONNECT
-                )
-            )
-        } else {
-            val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-            enableBluetoothLauncher.launch(enableBtIntent)
-        }
-    }
+//    private fun enableBluetooth() {
+//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+//            bluetoothPermissionsLauncher.launch(
+//                arrayOf(
+//                    Manifest.permission.BLUETOOTH_SCAN,
+//                    Manifest.permission.BLUETOOTH_CONNECT
+//                )
+//            )
+//        } else {
+//            val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+//            enableBluetoothLauncher.launch(enableBtIntent)
+//        }
+//    }
 
     @SuppressLint("MissingPermission")
     private fun showBluetoothDevicesList() {
@@ -242,7 +242,7 @@ class NewBluetoothActivity : AppCompatActivity() {
     }
 
     private fun startConnection(device: BluetoothDevice, bluetoothAdapter: BluetoothAdapter) {
-        bluetoothConnection = BluetoothConnectionService(this, bluetoothAdapter)
+        bluetoothConnection = BluetoothConnectionService(bluetoothAdapter, this)
         startBTConnection(device, uuid)
     }
 
@@ -253,5 +253,13 @@ class NewBluetoothActivity : AppCompatActivity() {
 
     private fun toast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    }
+
+    override fun onDeviceConnected() {
+        toast("Device connected by bluetooth")
+    }
+
+    override fun onNewData(incomingData: Short) {
+        //TODO("Not yet implemented")
     }
 }

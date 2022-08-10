@@ -22,6 +22,7 @@ class AudioHelper(
 //            audioTrack.write(audioData, 0, minShortBufferSize)
 //        }
 //        streamAudioHandler.post(streamAudioCode)
+
         val runnable = Runnable {
             audioTrack.write(audioData, 0, minShortBufferSize)
         }

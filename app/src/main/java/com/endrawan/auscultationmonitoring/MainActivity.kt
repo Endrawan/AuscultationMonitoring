@@ -140,6 +140,7 @@ class MainActivity : AppCompatActivity(), SerialInputOutputManager.Listener {
     override fun onDestroy() {
         super.onDestroy()
         usbHelper.port?.close()
+        stopAction()
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {

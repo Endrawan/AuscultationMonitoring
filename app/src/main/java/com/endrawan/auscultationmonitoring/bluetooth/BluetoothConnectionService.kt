@@ -4,24 +4,31 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
-import android.content.Context
 import android.util.Log
-import android.widget.Toast
+import com.endrawan.auscultationmonitoring.callbacks.BluetoothCallbacks
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.nio.charset.Charset
 import java.util.*
+import kotlin.experimental.and
 
-class BluetoothConnectionService(val mContext: Context, val bluetoothAdapter: BluetoothAdapter) {
+class BluetoothConnectionService(val bluetoothAdapter: BluetoothAdapter, val bluetoothCallbacks: BluetoothCallbacks) {
     private val TAG = "BluetoothConnectionServ"
     private val appName = "Auscultation Monitoring"
     private val appUUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
 
     private lateinit var mmDevice: BluetoothDevice
+//    private lateinit var deviceSocket: BluetoothSocket
     private lateinit var deviceUUID: UUID
-    private lateinit var connectThread: ConnectThread
-    private lateinit var connectedThread: ConnectedThread
+    private var connectThread: ConnectThread? = null
+    private var connectedThread: ConnectedThread? = null
+
+    private var IS_LISTENING = false
+
+    private var NL_active = false
+    private var CR_active = false
+    private var tempBuffer = ""
 
     /**
      * This thread runs while attempting to make an outgoing connectoin
@@ -57,6 +64,7 @@ class BluetoothConnectionService(val mContext: Context, val bluetoothAdapter: Bl
             }
 
             mmSocket = tmp!!
+//            deviceSocket = tmp!!
 
             // Always cancel discovery because it will slow down a connection
             bluetoothAdapter.cancelDiscovery()
@@ -66,12 +74,15 @@ class BluetoothConnectionService(val mContext: Context, val bluetoothAdapter: Bl
                 // This is a blocking call and will only return on a
                 // successful connection or an exception
                 mmSocket.connect()
+//                deviceSocket.connect()
 
                 Log.d(TAG, "run: ConnectThread connected.")
+                bluetoothCallbacks.onDeviceConnected()
             } catch (e: IOException) {
                 // Close the socket
                 try {
                     mmSocket.close()
+//                    deviceSocket.close()
                     Log.d(TAG, "run: Closed socket.")
                 } catch (e1: IOException) {
                     Log.e(
@@ -88,6 +99,7 @@ class BluetoothConnectionService(val mContext: Context, val bluetoothAdapter: Bl
             try {
                 Log.d(TAG, "cancel: Closing Client Socket.")
                 mmSocket.close()
+//                deviceSocket.close()
             } catch (e: IOException) {
                 Log.e(TAG, "cancel: close() of mmSocket in ConnectThread is failed. ${e.message}")
             }
@@ -98,7 +110,33 @@ class BluetoothConnectionService(val mContext: Context, val bluetoothAdapter: Bl
         Log.d(TAG, "startClient: Started.")
 
         connectThread = ConnectThread(device, uuid)
-        connectThread.start()
+        connectThread?.start()
+    }
+
+    fun startListening() {
+        IS_LISTENING = true
+    }
+
+    fun stopListening() {
+        IS_LISTENING = false
+    }
+
+    /**
+     * Stop all running bluetooth thread
+     */
+    @Synchronized
+    fun stop() {
+        Log.d(TAG, "stop: Stop thread")
+
+        if(connectThread != null) {
+            connectThread?.cancel()
+            connectThread = null
+        }
+
+        if(connectedThread != null) {
+            connectedThread?.cancel()
+            connectedThread = null
+        }
     }
 
     private inner class ConnectedThread(val mmSocket: BluetoothSocket) : Thread() {
@@ -112,7 +150,6 @@ class BluetoothConnectionService(val mContext: Context, val bluetoothAdapter: Bl
             var tmpIn: InputStream? = null
             var tmpOut: OutputStream? = null
 
-//            Toast.makeText(mContext, "Bluetooth connected.", Toast.LENGTH_SHORT).show()
             Log.d(TAG, "ConnectedThread: init: Bluetooth connected")
 
             try {
@@ -133,9 +170,23 @@ class BluetoothConnectionService(val mContext: Context, val bluetoothAdapter: Bl
 
             while (true) {
                 try {
-                    bytes = inputStream.read(buffer)
-                    val incomingMessage = String(buffer, 0, bytes)
-                    Log.d(TAG, "InputStream: $incomingMessage")
+                    if(inputStream.available() > 0) {
+                        val data = ByteArray(inputStream.available())
+                        val len = inputStream.read(data)
+                        if(IS_LISTENING) {
+                            processRawData(data)
+                        }
+//                        onNewDataDiagnostic(data)
+                    }
+
+//                    val len = inputStream.read(buffer)
+//                    val data = buffer.copyOf(len)
+
+//                    bytes = inputStream.read(buffer)
+//                    val incomingMessage = String(buffer, 0, bytes)
+//                    if(IS_LISTENING) {
+//                        processRawData(data)
+//                    }
                 } catch (e: IOException) {
                     Log.e(TAG, "write: Error reading Input Stream. ${e.message}" )
                     break
@@ -164,7 +215,12 @@ class BluetoothConnectionService(val mContext: Context, val bluetoothAdapter: Bl
         Log.d(TAG, "connected: Started.")
 
         connectedThread = ConnectedThread(mmSocket)
-        connectedThread.start()
+        connectedThread?.start()
+    }
+
+    fun writeText(text: String) {
+        val bytes = text.toByteArray(Charset.defaultCharset())
+        write(bytes)
     }
 
     /**
@@ -181,6 +237,42 @@ class BluetoothConnectionService(val mContext: Context, val bluetoothAdapter: Bl
         Log.d(TAG, "write: Write Called.")
 
         //perform the write
-        connectedThread.write(out)
+        connectedThread?.write(out)
+    }
+
+    private fun processRawData(data: ByteArray) {
+        for (i in data.indices) {
+            when (val intVal = data[i].toInt()) {
+                10 -> NL_active = true
+                13 -> CR_active = true
+                else -> {
+                    val c = intVal.toChar()
+                    tempBuffer += c
+                }
+            }
+
+            if (NL_active && CR_active) {
+                var serialValue = tempBuffer.toShortOrNull()
+                tempBuffer = ""
+                CR_active = false
+                NL_active = false
+
+                if (serialValue == null) continue
+
+                serialValue = serialValue and 1023
+
+                bluetoothCallbacks.onNewData(serialValue)
+            }
+        }
+    }
+
+    private fun onNewDataDiagnostic(data: ByteArray) {
+        Log.d(TAG, "Data size: ${data.size}")
+        Log.d(TAG, "Received data: ${data.toString(Charsets.US_ASCII)}")
+    }
+
+    private fun onNewDataDiagnostic(data: Byte) {
+        Log.d(TAG, "Data size: 1")
+        Log.d(TAG, "Received data: $data")
     }
 }
