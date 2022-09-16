@@ -518,11 +518,12 @@ class MainBluetoothActivity : AppCompatActivity(), BluetoothCallbacks {
 
     @SuppressLint("MissingPermission")
     private fun showBluetoothDevicesList() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            showCompanionDevicePairing()
-        } else {
-            showLegacyBluetoothDevices()
-        }
+//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+//            showCompanionDevicePairing()
+//        } else {
+//            showLegacyBluetoothDevices()
+//        }
+        showLegacyBluetoothDevices()
     }
 
     @SuppressLint("MissingPermission")
